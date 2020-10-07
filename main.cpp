@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <cstring>
 #include <fcntl.h>
+#include <sys/wait.h>
 
 
 
@@ -39,12 +40,13 @@ vector<char*> getInput() {
 }
 
 
-char* getPath(char* file, int local) {
+char* getPath(char* file, char* local) {
   char* str1;
   char* str2;
-  if (local) {
+  if (!strcmp(local, "localFilePath")) {
     str1 = "./";
-  }else {
+  }
+  else if (!strcmp(local, "commandPath")) {
     str1 = "/usr/bin/";
   }
 
@@ -56,35 +58,28 @@ char* getPath(char* file, int local) {
 
 }
 
-void execRedirect(char* path, char* argv[], char* reArgv[], int length) {
-  //char* reArgv[80];
-  char* openPath = getPath(argv[length - 1], 1);
-  /*int i = 0;
-  while (argv[i] != ">" || argv[i] != "<") {
-    reArgv[i] = argv[i];
-    i++;
-  }
-  reArgv[i] = NULL;*/
-  //get function descriptor for file
+void execRedirect(char* pathToCommand, char* argv[], char* reArgv[], int length) {
+
+  char* pathToFile = getPath(argv[length - 1], "commandPath");
 
   //check for input redirection
   if (!strcmp(argv[length - 2], "<")) {
-    int input_fds = open(openPath, O_RDONLY);
+    int input_fds = open(pathToFile, O_RDONLY);
     if(dup2(input_fds, STDIN_FILENO) < 0) {
       printf("Unable to duplicate file descriptor.");
       exit(EXIT_FAILURE);
     }
 
-    execvp(path, reArgv);
+    execvp(pathToCommand, reArgv);
   }
   //check for output redirection
   else if (!strcmp(argv[length - 2], ">")) {
-    int output_fds = open(openPath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    int output_fds = open(pathToFile, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if(dup2(output_fds, STDOUT_FILENO) < 0) {
       printf("Unable to duplicate file descriptor.");
       exit(EXIT_FAILURE);
     }
-    execvp(path, reArgv);
+    execvp(pathToCommand, reArgv);
   }
 }
 
@@ -100,7 +95,7 @@ int buildArgList(char* argv[], char* reArgv[], int &length, vector<char*> comman
         }
         reArgv[length] = NULL;
     }
-
+      //build full argument list
       argv[i] = commands[i];
       length += 1;
 
@@ -109,7 +104,8 @@ int buildArgList(char* argv[], char* reArgv[], int &length, vector<char*> comman
   return hasRedirect;
 }
 
-void forkAndExec(char* path, char* argv[], char* reArgv[], int length, int hasRedirect) {
+void forkAndExec(char* argv[], char* reArgv[], int length, int hasRedirect) {
+  char* pathToCommand = getPath(argv[0], "commandPath");
   int pid = fork();
 
   if (pid < 0) { //error forking process
@@ -121,61 +117,14 @@ void forkAndExec(char* path, char* argv[], char* reArgv[], int length, int hasRe
   else if (pid == 0) { //child process
       //cout << "Child process" << '\n';
 
-      //test file redirection//////////////////////////////////////////////////
-
       if (hasRedirect) {
+        execRedirect(pathToCommand, argv, reArgv, length);
 
-
-      execRedirect(path, argv, reArgv, length);
-      //create file path to local file
-     /*char* first;
-     char* second;
-     first = "./";
-     second = argv[length - 1];
-     char* openPath = (char*) malloc(1 + strlen(first) + strlen(second));
-     strcpy(openPath, first);
-     strcpy(openPath, second);*/
-
-
-     /*char* openPath = getPath(argv[length - 1], 1);
-
-
-
-     //get function descriptor for file
-
-
-     //check for input redirection
-     if (!strcmp(argv[length - 2], "<")) {
-       int input_fds = open(openPath, O_RDONLY);
-       if(dup2(input_fds, STDIN_FILENO) < 0) {
-         printf("Unable to duplicate file descriptor.");
-         exit(EXIT_FAILURE);
-       }
-
-       execvp(path, reArgv);
-
-
-
-
-     }
-     //check for output redirection
-     else if (!strcmp(argv[length - 2], ">")) {
-       int output_fds = open(openPath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-       if(dup2(output_fds, STDOUT_FILENO) < 0) {
-         printf("Unable to duplicate file descriptor.");
-         exit(EXIT_FAILURE);
-       }
-
-
-       execvp(path, reArgv);
-     }*/
-   }
-
-      /////////////////////////////////////////////////////////////////////////
+        }
 
       //check if command is not cd or help, then execute command
       if (strcmp(argv[0], "cd")  || strcmp(argv[0], "help")) {
-          if (execvp(path, argv)) { //execute command and check for failure
+          if (execvp(pathToCommand, argv)) { //execute command and check for failure
                cout << "Unrecognized/unsupported command\n";
                }
           }
@@ -193,9 +142,10 @@ void forkAndExec(char* path, char* argv[], char* reArgv[], int length, int hasRe
     //check for help commands//FUNCTION
     if(!strcmp(argv[0], "help")) {
           puts("Welcome to my shell.  Here is a list of supported commands.\n"
-               "Other Unix system calls may be possible but untested\n"
+               "Other Unix system calls may be possible, but are untested\n\n"
                "ls [OPTION]... [FILE]...\n"
                "pwd [OPTION]...\n"
+               "date\n"
                "whoami [OPTION]...\n"
                "hostname [OPTION]...\n"
                "ps [options]\n"
@@ -204,189 +154,52 @@ void forkAndExec(char* path, char* argv[], char* reArgv[], int length, int hasRe
                "exit\n"
                "type [cmd] --help for more information\n");
     }
-    sleep(1);
+
+    wait(NULL);
     cout <<'\n';
-
         }
+}
 
-
-
+void clearConsole() {
+    char* path = "/usr/bin/clear";
+    char* argv[] = {"clear", NULL};
+    char* reArgv[] = {};
+    forkAndExec(argv, reArgv, 1, 0);
+    puts("my_shell started.  Type 'help' for commands\n");
 }
 
 
 
 int main()
 {
-    //clear console when shell is opened
-    system("clear");
+
+    clearConsole();
 
     //command vector and command string
     vector<char*> commands;
-    char* cmd = " ";
-
-
+    int hasRedirect;
 
     while (1) {
 
-      int hasRedirect = 0;
-
 	    //initialize
+      char* argv[80]; //command and all arguments
+      char* reArgv[80];  //command and all arguments to left of > if applicable
+	    int argLength = 0;
+      hasRedirect = 0;
+      commands.clear();
       initialize();
-	    commands.clear();
 
-	    //get input
       commands = getInput();
-	    cmd = commands[0];
 
       //check for exit or quit
-	    if (!strcmp(cmd, "exit") || !strcmp(cmd, "quit") || !strcmp(cmd, "q")) {
+	    if (!strcmp(commands[0], "exit") || !strcmp(commands[0], "quit") || !strcmp(commands[0], "q")) {
 		      return 0;
 	       }
 
+      hasRedirect = buildArgList(argv, reArgv, argLength, commands);
 
-	    //create file path//FUNCTION + str1 option for redirect or no
-	    /*char* str1;
-	    char* str2;
-	    str1 = "/usr/bin/";
-	    str2 = cmd;
-	    char* path = (char*) malloc(1 + strlen(str1) + strlen(str2));
-	    strcpy(path, str1);
-	    strcpy(path, str2);*/
-
-      char* path = getPath(cmd, 0);
-
-
-	    //build argument list//FUNCTION
-	    char* argv[80];
-      char* reArgv[80];
-	    int length = 0;
-
-      hasRedirect = buildArgList(argv, reArgv, length, commands);
-
-      /*
-	    for (int i = 0; i < commands.size(); i++) {
-        //check for redirect
-        if(!strcmp(commands[i], "<") || !strcmp(commands[i], ">")) {
-            hasRedirect = 1;
-            //build left side of argument list
-            for (int i = 0; i < length; i++) {
-              reArgv[i] = argv[i];
-            }
-            reArgv[length] = NULL;
-        }
-
-		      argv[i] = commands[i];
-		      length += 1;
-
-	       }
-	    argv[length] = NULL;
-*/
-
-
-    //create child process to handle command//FUNCTION
-    /*int pid = fork();
-
-   	if (pid < 0) { //error forking process
-
-        cout << "Error\n";
-		      return 1;
-		      }
-
-    else if (pid == 0) { //child process
-		    //cout << "Child process" << '\n';
-
-        //test file redirection//////////////////////////////////////////////////
-
-        if (hasRedirect) {
-
-
-        execRedirect(path, argv, reArgv, length);
-        //create file path to local file
-       /*char* first;
-       char* second;
-       first = "./";
-       second = argv[length - 1];
-       char* openPath = (char*) malloc(1 + strlen(first) + strlen(second));
-       strcpy(openPath, first);
-       strcpy(openPath, second);*/
-
-
-       /*char* openPath = getPath(argv[length - 1], 1);
-
-
-
-       //get function descriptor for file
-
-
-       //check for input redirection
-       if (!strcmp(argv[length - 2], "<")) {
-         int input_fds = open(openPath, O_RDONLY);
-         if(dup2(input_fds, STDIN_FILENO) < 0) {
-           printf("Unable to duplicate file descriptor.");
-           exit(EXIT_FAILURE);
-         }
-
-         execvp(path, reArgv);
-
-
-
-
-       }
-       //check for output redirection
-       else if (!strcmp(argv[length - 2], ">")) {
-         int output_fds = open(openPath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-         if(dup2(output_fds, STDOUT_FILENO) < 0) {
-           printf("Unable to duplicate file descriptor.");
-           exit(EXIT_FAILURE);
-         }
-
-
-         execvp(path, reArgv);
-       }*/
-
-       forkAndExec(path, argv, reArgv, length, hasRedirect);
+      forkAndExec(argv, reArgv, argLength, hasRedirect);
      }
 
-        /////////////////////////////////////////////////////////////////////////
-
-        //check if command is not cd or help, then execute command
-		   /* if (strcmp(argv[0], "cd")  || strcmp(argv[0], "help")) {
-		        if (execvp(path, argv)) { //execute command and check for failure
-			           cout << "Unrecognized/unsupported command\n";
-		             }
-		        }
-
-        exit(1);
-      }
-
-    else { //parent process
-
-      //check for cd command and execute//FUNCTION
-	    if (!strcmp(argv[0], "cd")) {
-			     chdir(argv[1]);
-		    }
-
-      //check for help commands//FUNCTION
-      if(!strcmp(argv[0], "help")) {
-            puts("Welcome to my shell.  Here is a list of supported commands.\n"
-                 "Other Unix system calls may be possible but untested\n"
-                 "ls [OPTION]... [FILE]...\n"
-                 "pwd [OPTION]...\n"
-                 "whoami [OPTION]...\n"
-                 "hostname [OPTION]...\n"
-                 "ps [options]\n"
-                 "cd [directory]\n"
-                 "file redirection with '>' and '<'\n"
-                 "exit\n"
-                 "type [cmd] --help for more information\n");
-      }
-		  sleep(1);
-		  cout <<'\n';
-
-		      }
-
-
-
-	}*/
     return 0;
 }
