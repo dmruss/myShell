@@ -20,3 +20,10 @@ buildArgList() - Builds an array of c_strings from the command and each argument
 forkAndExec() - Where the child processes is created and executed.
 
 execRedirect() - Function to execute commands with redirects (< and >).  This function uses dup2() to change the file descriptor.
+
+## To Run
+1) Navigate to folder containing the main.cpp and makefile in a linux environment with Make installed.
+
+2) Type 'make shell' to build
+
+3) Type './shell' to run
