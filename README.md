@@ -1,5 +1,5 @@
 # myShell
-My own Linux shell
+A custom Linux shell written in C++
 
 ## Overview
 This was a great exercise in learning about Linux system calls and process concurrency.  This shell is built to run single word commands (ps, date, etc.), commands with arguments (ps -aux), and commands with input and output redirection (ls > output.txt).  The system calls are run within a child process while the parent process wait for the child to terminate.
